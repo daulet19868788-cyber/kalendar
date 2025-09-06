@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Countdown Pro — точный отсчёт до события</title>
+  <style>
+    :root{
+      --bg:#0b1020; --bg2:#0a0f1d; --card:#0f172a; --glass:rgba(255,255,255,.06);
+      --accent:#7c3aed; --accent2:#06b6d4; --text:#e6eef8; --muted:#97a6ba;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;
+      background: radial-gradient(1200px 600px at 20% -10%, #13223f, transparent),
+                  radial-gradient(1000px 500px at 120% 10%, #0d1f3a, transparent),
+                  linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+      color:var(--text); display:flex; align-items:center; justify-content:center; padding:28px}
+    .wrap{width:100%; max-width:1024px}
+    header{display:flex; gap:14px; align-items:center; margin-bottom:16px}
+    .logo{width:64px;height:64px;border-radius:16px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:grid; place-items:center; font-weight:800; color:#081225; box-shadow:0 12px 40px rgba(10,12,20,.6)}
+    .title h1{margin:0;font-size:22px; letter-spacing:.2px}
+    .title p{margin:4px 0 0; font-size:13px; color:var(--muted)}
+
+    .card{display:grid; grid-template-columns:1fr 360px; gap:18px; background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:20px; box-shadow:0 18px 50px rgba(3,7,18,.6)}
+    @media(max-width:900px){.card{grid-template-columns:1fr}.side{order:-1}}
+
+    .controls{display:flex; gap:10px; flex-wrap:wrap}
+    select,input,button{background:var(--glass); border:1px solid rgba(255,255,255,.12); color:var(--text); padding:10px 12px; border-radius:12px; font-size:14px; outline:none}
+    select:focus,input:focus,button:focus{box-shadow:0 0 0 3px rgba(124,58,237,.25)}
+    button.primary{background:linear-gradient(90deg,var(--accent),var(--accent2)); border:none; color:#071124; font-weight:800}
+
+    .preview{position:relative; padding:22px; border-radius:14px; background:linear-gradient(180deg,rgba(14,22,38,.55),rgba(14,22,38,.35)); border:1px solid rgba(255,255,255,.05); min-height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center}
+    .target{font-size:14px; color:var(--muted)}
+    .time{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:14px}
+    .unit{min-width:108px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.06); padding:14px; border-radius:14px; box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+    .val{font-weight:800; font-size:28px; letter-spacing:.5px}
+    .lbl{font-size:12px; color:var(--muted); margin-top:6px}
+
+    .phrase{margin-top:12px; font-size:13px; color:var(--muted)}
+
+    .side{padding:16px; border-radius:14px; background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.06)}
+    .side h3{margin:0 0 10px}
+    .event-list{display:flex; flex-direction:column; gap:8px}
+    .event-item{display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,.03)}
+    .event-item small{color:var(--muted)}
+
+    footer{margin-top:14px; text-align:center; color:var(--muted); font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">D∞</div>
+      <div class="title">
+        <h1>Счётчик времени — точный отсчёт до события</h1>
+        <p>Дни, часы, минуты, секунды и миллисекунды. Красивый дизайн, работает офлайн.</p>
+      </div>
+    </header>
+
+    <main class="card">
+      <section>
+        <div class="controls">
+          <select id="presetSelect" aria-label="Выберите событие"></select>
+          <input id="customDate" type="datetime-local" title="Своя дата" />
+          <button id="setCustom" type="button">Установить свою</button>
+          <button id="toggle" class="primary" type="button">Пауза</button>
+        </div>
+
+        <div class="preview" id="preview">
+          <div class="target" id="targetLabel">—</div>
+          <div class="time" id="timeUnits" aria-live="polite"></div>
+          <div class="phrase" id="phrase"></div>
+          <div class="phrase">Часовой пояс устройства: <span id="tzName"></span></div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <h3>Популярные события</h3>
+        <div class="event-list" id="eventList"></div>
+        <small class="phrase">Рамадан указан по предварительным астрономическим прогнозам, фактическая дата может корректироваться наблюдением луны.</small>
+      </aside>
+    </main>
+
+    <footer>Сохраните файл как <code>countdown.html</code> (или любое имя) и откройте в браузере.</footer>
+  </div>
+
+  <script>
+    // ===== Утилиты дат (локальное время, без таймзонных сюрпризов) =====
+    const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone||'локальный';
+    document.getElementById('tzName').textContent = tzName;
+
+    function nextDate(monthIndex, day, h=0,m=0,s=0,ms=0){
+      const now = new Date();
+      let d = new Date(now.getFullYear(), monthIndex, day, h, m, s, ms);
+      if(d <= now) d = new Date(now.getFullYear()+1, monthIndex, day, h, m, s, ms);
+      return d;
+    }
+
+    function parseLocalDatetime(value){
+      // value: "YYYY-MM-DDTHH:MM" (без таймзоны). Создаём локальный Date.
+      if(!value) return null;
+      const [d, t='00:00'] = value.split('T');
+      const [y,mo,da] = d.split('-').map(Number);
+      const [hh,mm]   = t.split(':').map(Number);
+      return new Date(y, (mo||1)-1, da||1, hh||0, mm||0, 0, 0);
+    }
+
+    function plural(n, forms){
+      // forms: ['день','дня','дней']
+      const n10 = n % 10, n100 = n % 100;
+      if(n10===1 && n100!==11) return forms[0];
+      if(n10>=2 && n10<=4 && (n100<10 || n100>=20)) return forms[1];
+      return forms[2];
+    }
+
+    // ===== Пресеты =====
+    const presets = [
+      { id:'newyear',  name:()=>`Новый год ${nextDate(0,1).getFullYear()}`, getTarget:()=> nextDate(0,1) },
+      { id:'sept1',    name:()=>`1 сентября ${nextDate(8,1).getFullYear()}`, getTarget:()=> nextDate(8,1) },
+      { id:'summer',   name:()=>`Начало лета ${nextDate(5,1).getFullYear()}`, getTarget:()=> nextDate(5,1) },
+      { id:'halloween',name:()=>`Хэллоуин ${nextDate(9,31).getFullYear()}`,  getTarget:()=> nextDate(9,31) },
+      // Рамадан 2026 — ориентировочно 18 февраля 2026 (локально, 00:00)
+      { id:'ramadan',  name:()=>`Рамадан 2026 (предв.)`, getTarget:()=> new Date(2026,1,18,0,0,0,0) },
+    ];
+
+    const sel   = document.getElementById('presetSelect');
+    const list  = document.getElementById('eventList');
+    const label = document.getElementById('targetLabel');
+    const units = document.getElementById('timeUnits');
+    const phrase= document.getElementById('phrase');
+
+    presets.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = p.name(); sel.appendChild(opt);
+
+      const item = document.createElement('div'); item.className='event-item';
+      const d = p.getTarget();
+      item.innerHTML = `<div>${p.name()}</div><small>${d.toLocaleString()}</small>`;
+      list.appendChild(item);
+    });
+
+    function setTarget(date, labelText){
+      currentTarget = date;
+      label.textContent = `${labelText} — ${date.toLocaleString()}`;
+    }
+
+    let currentTarget = presets[0].getTarget();
+    setTarget(currentTarget, presets[0].name());
+
+    sel.addEventListener('change',()=>{
+      const p = presets.find(x=>x.id===sel.value);
+      setTarget(p.getTarget(), p.name());
+    });
+
+    // Установка своей даты — исправлено: надёжный парсер локального времени + по клику и по Enter
+    const input = document.getElementById('customDate');
+    document.getElementById('setCustom').addEventListener('click',()=>{
+      const d = parseLocalDatetime(input.value);
+      if(!d || isNaN(+d)) return alert('Выберите корректную дату и время.');
+      setTarget(d, 'Пользовательская дата');
+    });
+    input.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){ e.preventDefault(); document.getElementById('setCustom').click(); }
+    });
+
+    // ===== Отрисовка таймера =====
+    let running = true; let rafId = null;
+
+    document.getElementById('toggle').addEventListener('click', (e)=>{
+      running = !running; e.target.textContent = running ? 'Пауза' : 'Запустить';
+      if(running) loop(); else cancelAnimationFrame(rafId);
+    });
+
+    function diffParts(from, to){
+      let diff = to - from; // ms (может быть <0)
+      const past = diff < 0; if(past) diff = -diff;
+      const days = Math.floor(diff / 86_400_000); diff -= days*86_400_000;
+      const hours = Math.floor(diff / 3_600_000); diff -= hours*3_600_000;
+      const minutes = Math.floor(diff / 60_000);   diff -= minutes*60_000;
+      const seconds = Math.floor(diff / 1_000);    diff -= seconds*1_000;
+      const ms = Math.floor(diff % 1_000);
+      return {past, days, hours, minutes, seconds, ms};
+    }
+
+    function render(parts){
+      units.innerHTML = '';
+      const items = [
+        ['Дней', parts.days],
+        ['Часов', parts.hours],
+        ['Минут', parts.minutes],
+        ['Секунд', parts.seconds],
+        ['Мсек', parts.ms]
+      ];
+      for(const [lbl,val] of items){
+        const el = document.createElement('div'); el.className='unit';
+        const vv = (lbl==='Мсек') ? String(val).padStart(3,'0') : String(val).padStart(2,'0');
+        el.innerHTML = `<div class="val">${vv}</div><div class="lbl">${lbl}</div>`;
+        units.appendChild(el);
+      }
+
+      // Фраза: "Осталось" / "Прошло"
+      const p = parts;
+      const dayW = plural(p.days, ['день','дня','дней']);
+      const hrW  = plural(p.hours, ['час','часа','часов']);
+      const mW   = plural(p.minutes, ['минута','минуты','минут']);
+      const sW   = plural(p.seconds, ['секунда','секунды','секунд']);
+      phrase.textContent = `${p.past?'Прошло':'Осталось'}: ${p.days} ${dayW}, ${p.hours} ${hrW}, ${p.minutes} ${mW}, ${p.seconds} ${sW}.`;
+    }
+
+    function loop(){
+      if(!running) return; const now = new Date();
+      render(diffParts(now, currentTarget));
+      rafId = requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>
+ 
